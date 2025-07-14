@@ -3,6 +3,8 @@ import 'package:chat_app/widgets/custom_button.dart';
 import 'package:chat_app/widgets/custom_text_field.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:chat_app/screens/home.dart';
+import 'package:loading_indicator/loading_indicator.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -28,16 +30,24 @@ class _LoginPageState extends State<LoginPage> {
         password: _passwordController.text.trim(),
       );
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Login successful")),
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const HomePage()),
       );
     } on FirebaseAuthException catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Login failed: ${e.message}")),
-      );
+      _showSnackbar("Login failed: ${e.message}", isError: true);
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  void _showSnackbar(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Colors.red : Colors.green,
+      ),
+    );
   }
 
   @override
@@ -51,7 +61,6 @@ class _LoginPageState extends State<LoginPage> {
             child: Form(
               key: _formKey,
               child: Column(
-                mainAxisSize: MainAxisSize.min,
                 children: [
                   const Text(
                     'Chatrio',
@@ -62,11 +71,11 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  Image.asset('assets/images/logo.png', height: 160, width: 160),
+                  Image.asset('assets/images/logo.png', height: 160),
                   const SizedBox(height: 20),
                   const Text(
                     'Login Page',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w500, color: Colors.white70),
+                    style: TextStyle(fontSize: 22, color: Colors.white70),
                   ),
                   const SizedBox(height: 20),
 
@@ -76,13 +85,13 @@ class _LoginPageState extends State<LoginPage> {
                     prefixIcon: Icons.email,
                     keyboardType: TextInputType.emailAddress,
                     validator: (value) {
-                      if (value == null || value.isEmpty || !value.contains('@')) {
+                      if (value == null || !value.contains('@')) {
                         return 'Enter a valid email';
                       }
                       return null;
                     },
                   ),
-                  const SizedBox(height: 16),
+
                   CustomTextField(
                     controller: _passwordController,
                     hintText: 'Enter your password',
@@ -95,17 +104,21 @@ class _LoginPageState extends State<LoginPage> {
                       return null;
                     },
                   ),
-                  const SizedBox(height: 24),
 
+                  const SizedBox(height: 24),
                   _isLoading
-                      ? const CircularProgressIndicator()
-                      : CustomButton(
-                    text: 'Login',
-                    onPressed: _login,
-                  ),
+                      ? const SizedBox(
+                    height: 60,
+                    width: 60,
+                    child: LoadingIndicator(
+                      indicatorType: Indicator.ballPulseRise,
+                      colors: [Colors.yellowAccent],
+                      strokeWidth: 2,
+                    ),
+                  )
+                      : CustomButton(text: 'Login', onPressed: _login),
 
                   const SizedBox(height: 24),
-
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -114,10 +127,10 @@ class _LoginPageState extends State<LoginPage> {
                         onPressed: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (context) => const RegisterPage()),
+                            MaterialPageRoute(builder: (_) => const RegisterPage()),
                           );
                         },
-                        child: const Text('Sign Up', style: TextStyle(color: Colors.white)),
+                        child: const Text('Sign Up', style: TextStyle(color: Colors.yellowAccent)),
                       ),
                     ],
                   ),
