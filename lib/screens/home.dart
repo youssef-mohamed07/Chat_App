@@ -1,11 +1,30 @@
-import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:chat_app/constants/colors.dart';
+import 'package:chat_app/constants/strings.dart';
 import 'package:chat_app/screens/login.dart';
+import 'package:chat_app/services/firebase_service.dart';
+import 'package:chat_app/widgets/message_input.dart';
+import 'package:chat_app/widgets/message_item.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
-  void _logout(BuildContext context) async {
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  final _controller = TextEditingController();
+  final _scrollController = ScrollController();
+  final user = FirebaseAuth.instance.currentUser;
+  final FirebaseService _firebaseService = FirebaseService();
+
+  String selectedRoom = kDefaultRooms[0]; // Default room
+
+  void _logout() async {
     await FirebaseAuth.instance.signOut();
     Navigator.pushAndRemoveUntil(
       context,
@@ -14,95 +33,130 @@ class HomePage extends StatelessWidget {
     );
   }
 
+  Future<void> _sendTextMessage() async {
+    final text = _controller.text.trim();
+    if (text.isEmpty) return;
+
+    try {
+      await _firebaseService.sendMessage(
+        text: text,
+        imageUrl: null,
+        userEmail: user!.email!,
+        userId: user!.uid,
+        room: selectedRoom,
+      );
+
+      _controller.clear();
+      _scrollToTop();
+    } catch (error) {
+      _showErrorSnackBar('Failed to send message: $error');
+    }
+  }
+
+  Future<void> _sendImageMessage() async {
+    try {
+      final imageUrl = await _firebaseService.uploadImageToStorage(ImageSource.gallery);
+      if (imageUrl == null) return;
+
+      await _firebaseService.sendMessage(
+        text: '',
+        imageUrl: imageUrl,
+        userEmail: user!.email!,
+        userId: user!.uid,
+        room: selectedRoom,
+      );
+
+      _scrollToTop();
+    } catch (error) {
+      _showErrorSnackBar('Image upload failed: $error');
+    }
+  }
+
+  void _scrollToTop() {
+    _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-
     return Scaffold(
-      extendBodyBehindAppBar: true,
+      backgroundColor: kBackgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: const Text("🏠 Home", style: TextStyle(color: Colors.white)),
+        backgroundColor: kDarkBlue,
+        title: Row(
+          children: [
+            Image.asset('assets/images/logo.png', height: 35),
+            const SizedBox(width: 10),
+            const Text(kAppTitle, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22)),
+          ],
+        ),
         actions: [
+          DropdownButton<String>(
+            value: selectedRoom,
+            underline: const SizedBox(),
+            dropdownColor: Colors.blue[100],
+            onChanged: (val) => setState(() => selectedRoom = val!),
+            items: kDefaultRooms.map((room) => DropdownMenuItem(
+              value: room,
+              child: Text(" $room"),
+            )).toList(),
+          ),
           IconButton(
-            icon: const Icon(Icons.logout, color: Colors.white),
+            onPressed: _logout,
+            icon: const Icon(Icons.logout),
             tooltip: "Logout",
-            onPressed: () => _logout(context),
           ),
         ],
       ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF1E3C72), Color(0xFF2A5298)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+      body: Column(
+        children: [
+          Expanded(child: _buildMessages()),
+          MessageInput(
+            controller: _controller,
+            onSend: _sendTextMessage,
+            onImagePick: _sendImageMessage,
           ),
-        ),
-        width: double.infinity,
-        height: double.infinity,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const CircleAvatar(
-              radius: 60,
-              backgroundColor: Colors.white24,
-              child: Icon(Icons.person, size: 60, color: Colors.white),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              "Welcome Back,",
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.85),
-                fontSize: 24,
-                fontWeight: FontWeight.w400,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              user?.email ?? "User",
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 30),
-            Card(
-              margin: const EdgeInsets.symmetric(horizontal: 40),
-              elevation: 8,
-              color: Colors.white.withOpacity(0.1),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  children: const [
-                    Text(
-                      "🎉 You're logged in successfully!",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 18,
-                        color: Colors.greenAccent,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    SizedBox(height: 12),
-                    Text(
-                      "Start chatting, sharing, and exploring the app.",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.white70,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildMessages() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('messages')
+          .where('room', isEqualTo: selectedRoom)
+          .orderBy('createdAt', descending: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) return Center(child: Text('Error: ${snapshot.error}'));
+        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+
+        final messages = snapshot.data!.docs;
+
+        if (messages.isEmpty) return const Center(child: Text('No messages yet'));
+
+        return ListView.builder(
+          controller: _scrollController,
+          reverse: true,
+          itemCount: messages.length,
+          itemBuilder: (context, index) {
+            final msg = messages[index].data() as Map<String, dynamic>;
+            final isMe = msg['userId'] == user?.uid;
+
+            return MessageItem(msg: msg, isMe: isMe);
+          },
+        );
+      },
     );
   }
 }

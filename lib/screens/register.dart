@@ -2,8 +2,8 @@ import 'package:chat_app/screens/login.dart';
 import 'package:flutter/material.dart';
 import 'package:chat_app/widgets/custom_button.dart';
 import 'package:chat_app/widgets/custom_text_field.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:loading_indicator/loading_indicator.dart';
+import 'package:chat_app/services/firebase_service.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -18,6 +18,8 @@ class _RegisterPageState extends State<RegisterPage> {
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
 
+  final FirebaseService _firebaseService = FirebaseService(); // ✅ Instance
+
   Future<void> _signUp() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -27,25 +29,27 @@ class _RegisterPageState extends State<RegisterPage> {
     setState(() => _isLoading = true);
 
     try {
-      await FirebaseAuth.instance.createUserWithEmailAndPassword(
+      final user = await _firebaseService.registerUser(
         email: email,
         password: password,
       );
 
-      _showSnackbar('Account created successfully!');
-      Navigator.pop(context);
-    } on FirebaseAuthException catch (e) {
-      String errorMessage = 'Registration failed';
-      if (e.code == 'email-already-in-use') {
-        errorMessage = 'This email is already registered';
-      } else if (e.code == 'invalid-email') {
-        errorMessage = 'Invalid email address';
-      } else if (e.code == 'weak-password') {
-        errorMessage = 'Password is too weak';
+      if (user != null) {
+        _showSnackbar('Account created successfully!');
+        Navigator.pop(context);
       }
-      _showSnackbar(errorMessage, isError: true);
-    } catch (_) {
-      _showSnackbar('Something went wrong. Please try again.', isError: true);
+    } catch (e) {
+      String errorMessage = e.toString().toLowerCase();
+
+      if (errorMessage.contains('email-already-in-use')) {
+        _showSnackbar('This email is already registered', isError: true);
+      } else if (errorMessage.contains('invalid-email')) {
+        _showSnackbar('Invalid email address', isError: true);
+      } else if (errorMessage.contains('weak-password')) {
+        _showSnackbar('Password is too weak', isError: true);
+      } else {
+        _showSnackbar('Registration failed: $e', isError: true);
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -73,7 +77,7 @@ class _RegisterPageState extends State<RegisterPage> {
               child: Column(
                 children: [
                   const Text(
-                    'Chatrio',
+                    'ChatRio',
                     style: TextStyle(
                       fontSize: 32,
                       fontWeight: FontWeight.bold,

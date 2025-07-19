@@ -2,9 +2,9 @@ import 'package:chat_app/screens/register.dart';
 import 'package:chat_app/widgets/custom_button.dart';
 import 'package:chat_app/widgets/custom_text_field.dart';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:chat_app/screens/home.dart';
 import 'package:loading_indicator/loading_indicator.dart';
+import 'package:chat_app/services/firebase_service.dart'; // ✅ import your service
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -19,23 +19,27 @@ class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
 
+  final FirebaseService _firebaseService = FirebaseService(); // ✅ instance
+
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
 
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
+      final user = await _firebaseService.loginUser(
+        email: _emailController.text,
+        password: _passwordController.text,
       );
 
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const HomePage()),
-      );
-    } on FirebaseAuthException catch (e) {
-      _showSnackbar("Login failed: ${e.message}", isError: true);
+      if (user != null) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const HomePage()),
+        );
+      }
+    } catch (e) {
+      _showSnackbar("Login failed: ${e.toString()}", isError: true);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -63,7 +67,7 @@ class _LoginPageState extends State<LoginPage> {
               child: Column(
                 children: [
                   const Text(
-                    'Chatrio',
+                    'ChatRio',
                     style: TextStyle(
                       fontSize: 32,
                       fontWeight: FontWeight.bold,
